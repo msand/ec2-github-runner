@@ -13,6 +13,9 @@ function generateUniqueLabel() {
 const input = {
   mode: core.getInput('mode'),
   githubToken: core.getInput('github-token'),
+  /**
+   * @type {EC2.Types.RunInstancesRequest | null}
+   */
   ec2Params: JSON.parse(core.getInput('ec2-params')),
   ec2ImageId: core.getInput('ec2-image-id'),
   ec2InstanceType: core.getInput('ec2-instance-type'),

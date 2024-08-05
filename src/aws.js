@@ -64,16 +64,20 @@ async function startEc2Instance(label, githubRegistrationToken) {
         SecurityGroupIds: [securityGroupId],
         IamInstanceProfile: { Name: iamRoleName },
         TagSpecifications: tagSpecifications,
-        KeyName: keyName,
-        BlockDeviceMappings: [
-          {
-            DeviceName: storagePath,
-            Ebs: {
-              DeleteOnTermination: true,
-              VolumeSize: storageSize,
-            },
-          },
-        ],
+        ...(keyName ? { KeyName: keyName } : {}),
+        ...(storagePath && storageSize
+          ? {
+              BlockDeviceMappings: [
+                {
+                  DeviceName: storagePath,
+                  Ebs: {
+                    DeleteOnTermination: true,
+                    VolumeSize: storageSize,
+                  },
+                },
+              ],
+            }
+          : {}),
       };
 
   try {
