@@ -37,6 +37,7 @@ async function startEc2Instance(label, githubRegistrationToken) {
 
   const userData = buildUserDataScript(githubRegistrationToken, label);
 
+  const { storagePath, storageSize } = config.input;
   const params = {
     ImageId: config.input.ec2ImageId,
     InstanceType: config.input.ec2InstanceType,
@@ -47,6 +48,19 @@ async function startEc2Instance(label, githubRegistrationToken) {
     SecurityGroupIds: [config.input.securityGroupId],
     IamInstanceProfile: { Name: config.input.iamRoleName },
     TagSpecifications: config.tagSpecifications,
+    ...(storagePath && storageSize
+      ? {
+        BlockDeviceMappings: [
+          {
+            DeviceName: storagePath,
+            Ebs: {
+              DeleteOnTermination: true,
+              VolumeSize: storageSize,
+            },
+          },
+        ],
+      }
+      : {}),
   };
 
   try {

@@ -10,6 +10,8 @@ class Config {
       ec2InstanceType: core.getInput('ec2-instance-type'),
       subnetId: core.getInput('subnet-id'),
       securityGroupId: core.getInput('security-group-id'),
+      storagePath: core.getInput('storage-path'),
+      storageSize: core.getInput('storage-size'),
       label: core.getInput('label'),
       ec2InstanceId: core.getInput('ec2-instance-id'),
       iamRoleName: core.getInput('iam-role-name'),
