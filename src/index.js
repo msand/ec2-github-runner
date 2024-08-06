@@ -236,12 +236,11 @@ async function waitForInstanceRunning(ec2InstanceId) {
 async function getRunner(label) {
     try {
         const runners = await octokit.paginate(`GET /repos/{owner}/{repo}/actions/runners`, githubContext);
-        const foundRunners = runners.filter((runner) => runner.labels.some((l) => l.name === label));
-        return foundRunners.length > 0 ? foundRunners[0] : null;
+        return runners.find((runner) => runner.labels.some((l) => l.name === label));
     }
     catch (e) {
         error(`Get runner error: ${e && typeof e === 'object' && 'message' in e ? e.message : e}`);
-        return null;
+        return undefined;
     }
 }
 // get GitHub Registration Token for registering a self-hosted runner
