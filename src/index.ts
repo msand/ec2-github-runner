@@ -1,4 +1,10 @@
-import * as AWS from 'aws-sdk';
+import {
+  _InstanceType,
+  EC2,
+  RunInstancesCommandInput,
+  TagSpecification,
+  waitUntilInstanceRunning,
+} from '@aws-sdk/client-ec2';
 import * as core from '@actions/core';
 import * as github from '@actions/github';
 import filter from 'lodash/filter';
@@ -24,9 +30,9 @@ if (!githubToken) {
   err(`The github-token input is not specified`);
 }
 
-const ec2Params: AWS.EC2.Types.RunInstancesRequest | null = JSON.parse(core.getInput(`ec2-params`));
+const ec2Params: RunInstancesCommandInput | null = JSON.parse(core.getInput(`ec2-params`));
 const ec2ImageId = core.getInput(`ec2-image-id`);
-const ec2InstanceType = core.getInput(`ec2-instance-type`);
+const ec2InstanceType = core.getInput(`ec2-instance-type`) as _InstanceType;
 const securityGroupId = core.getInput(`security-group-id`);
 const subnetId = core.getInput(`subnet-id`);
 
@@ -53,7 +59,7 @@ const runnerHomeDir = core.getInput(`runner-home-dir`);
 const preRunnerScript = core.getInput(`pre-runner-script`);
 
 const tags = JSON.parse(core.getInput(`aws-resource-tags`));
-const tagSpecifications =
+const tagSpecifications: TagSpecification[] | undefined =
   tags.length === 0
     ? undefined
     : [
@@ -113,7 +119,7 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
     ? prepareUserData(ud, label, githubRegistrationToken)
     : buildUserDataScript(label, githubRegistrationToken);
   const userData = Buffer.from(userDataString).toString(`base64`);
-  const params: AWS.EC2.RunInstancesRequest = ec2Params
+  const params: RunInstancesCommandInput = ec2Params
     ? { ...ec2Params, UserData: userData }
     : {
         ImageId: ec2ImageId,
@@ -142,7 +148,7 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
       };
 
   try {
-    const result = await new AWS.EC2().runInstances(params).promise();
+    const result = await new EC2().runInstances(params);
     const ec2InstanceId = result.Instances?.[0]?.InstanceId;
     if (ec2InstanceId) {
       core.info(`AWS EC2 instance ${ec2InstanceId} is started`);
@@ -158,11 +164,9 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
 
 async function terminateEc2Instance() {
   try {
-    await new AWS.EC2()
-      .terminateInstances({
-        InstanceIds: [ec2InstanceId],
-      })
-      .promise();
+    await new EC2().terminateInstances({
+      InstanceIds: [ec2InstanceId],
+    });
     core.info(`AWS EC2 instance ${ec2InstanceId} is terminated`);
   } catch (error) {
     core.error(`AWS EC2 instance ${ec2InstanceId} termination error`);
@@ -172,11 +176,16 @@ async function terminateEc2Instance() {
 
 async function waitForInstanceRunning(ec2InstanceId: string) {
   try {
-    await new AWS.EC2()
-      .waitFor(`instanceRunning`, {
+    const timeoutMinutes = 5;
+    await waitUntilInstanceRunning(
+      {
+        client: new EC2(),
+        maxWaitTime: timeoutMinutes * 60,
+      },
+      {
         InstanceIds: [ec2InstanceId],
-      })
-      .promise();
+      },
+    );
     core.info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
   } catch (error) {
     core.error(`AWS EC2 instance ${ec2InstanceId} initialization error`);
