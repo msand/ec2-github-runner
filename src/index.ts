@@ -6,11 +6,12 @@ import type {
   TagSpecification,
 } from '@aws-sdk/client-ec2';
 import * as AWS from '@aws-sdk/client-ec2';
-import { WaiterState } from '@smithy/util-waiter/dist-types/waiter';
+import { WaiterState } from '@smithy/util-waiter';
 
 const { error, getInput, info, setFailed, setOutput } = core;
 const { context, getOctokit } = github;
 const { EC2, waitUntilInstanceRunning } = AWS;
+const { SUCCESS } = WaiterState;
 
 function err(message: string): never {
   const e = new Error(message);
@@ -242,7 +243,7 @@ async function waitForInstanceRunning(ec2InstanceId: string) {
       },
     );
     const { state } = result;
-    if (state === WaiterState.SUCCESS) {
+    if (state === SUCCESS) {
       info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
       return;
     }

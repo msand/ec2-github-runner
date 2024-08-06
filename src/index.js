@@ -3,10 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const core = require("@actions/core");
 const github = require("@actions/github");
 const AWS = require("@aws-sdk/client-ec2");
-const waiter_1 = require("@smithy/util-waiter/dist-types/waiter");
+const util_waiter_1 = require("@smithy/util-waiter");
 const { error, getInput, info, setFailed, setOutput } = core;
 const { context, getOctokit } = github;
 const { EC2, waitUntilInstanceRunning } = AWS;
+const { SUCCESS } = util_waiter_1.WaiterState;
 function err(message) {
     const e = new Error(message);
     setFailed(message);
@@ -220,7 +221,7 @@ async function waitForInstanceRunning(ec2InstanceId) {
             InstanceIds: [ec2InstanceId],
         });
         const { state } = result;
-        if (state === waiter_1.WaiterState.SUCCESS) {
+        if (state === SUCCESS) {
             info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
             return;
         }
