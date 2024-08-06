@@ -167,27 +167,34 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
   throw new Error(`No ec2 instance id returned`);
 }
 
+function getDescription(currentState: AWS.InstanceState | undefined) {
+  const lowByte = +(currentState ?? 0) & 255;
+  switch (lowByte) {
+    case 32:
+      return `shutting-down`;
+    case 48:
+      return `terminated`;
+    case 64:
+      return `stopping`;
+    case 80:
+      return `stopped`;
+    default:
+      return lowByte;
+  }
+}
+
 async function terminateEc2Instance() {
   try {
     const result = await ec2.terminateInstances({
       InstanceIds: [ec2InstanceId],
     });
-    const lowByte = +(result.TerminatingInstances?.[0]?.CurrentState ?? 0) & 255;
-    const description =
-      lowByte === 32
-        ? `shutting-down`
-        : lowByte === 48
-          ? 'terminated'
-          : lowByte === 64
-            ? 'stopping'
-            : lowByte === 80
-              ? 'stopped'
-              : lowByte;
-    if (typeof description === 'string') {
+    const currentState = result.TerminatingInstances?.[0]?.CurrentState;
+    const description = getDescription(currentState);
+    if (typeof description === `string`) {
       info(`AWS EC2 instance ${ec2InstanceId} is ${description}`);
       return;
     }
-    err(`Failed to terminate, EC2 instance has state: ${lowByte}
+    err(`Failed to terminate, EC2 instance has state: ${description}
     /**
      *          <p>The valid values for instance-state-code will all be in the range of the low byte and
      *             they are:</p>
@@ -247,7 +254,7 @@ async function waitForInstanceRunning(ec2InstanceId: string) {
       info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
       return;
     }
-    err(`AWS EC2 instance ${ec2InstanceId} initialization error state: ${state}`);
+    err(`AWS EC2 instance state: ${state}`);
   } catch (e) {
     error(`AWS EC2 instance ${ec2InstanceId} initialization error`);
     throw e;
@@ -264,7 +271,7 @@ async function getRunner(label: string) {
     );
     return runners.find((runner) => runner.labels.some((l) => l.name === label));
   } catch (e) {
-    error(`Get runner error: ${e && typeof e === 'object' && 'message' in e ? e.message : e}`);
+    error(`Get runner error: ${e && typeof e === `object` && `message` in e ? e.message : e}`);
     return undefined;
   }
 }
@@ -368,5 +375,5 @@ async function stop() {
 
 (mode === `start` ? start : stop)().catch((e) => {
   error(e);
-  setFailed(e && 'message' in e ? e.message : e);
+  setFailed(e && `message` in e ? e.message : e);
 });
