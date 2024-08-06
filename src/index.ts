@@ -1,43 +1,46 @@
-import {
+import type {
   _InstanceType,
-  EC2,
   RunInstancesCommandInput,
   TagSpecification,
-  waitUntilInstanceRunning,
 } from '@aws-sdk/client-ec2';
+
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import filter from 'lodash/filter';
+import * as AWS from '@aws-sdk/client-ec2';
+
+const { error, setFailed, getInput, setOutput, info } = core;
+const { getOctokit, context } = github;
+const { EC2, waitUntilInstanceRunning } = AWS;
 
 function err(message: string) {
-  const err = new Error(message);
-  core.error(err);
-  core.setFailed(message);
-  throw err;
+  const e = new Error(message);
+  setFailed(message);
+  error(e);
+  throw e;
 }
 
 //
 // validate input
 //
 
-const mode = core.getInput(`mode`);
+const mode = getInput(`mode`);
 if (!mode) {
   err(`The mode input is not specified`);
 }
 
-const githubToken = core.getInput(`github-token`);
+const githubToken = getInput(`github-token`);
 if (!githubToken) {
   err(`The github-token input is not specified`);
 }
 
-const ec2Params: RunInstancesCommandInput | null = JSON.parse(core.getInput(`ec2-params`));
-const ec2ImageId = core.getInput(`ec2-image-id`);
-const ec2InstanceType = core.getInput(`ec2-instance-type`) as _InstanceType;
-const securityGroupId = core.getInput(`security-group-id`);
-const subnetId = core.getInput(`subnet-id`);
+const ec2Params: RunInstancesCommandInput | null = JSON.parse(getInput(`ec2-params`));
+const ec2ImageId = getInput(`ec2-image-id`);
+const ec2InstanceType = getInput(`ec2-instance-type`) as _InstanceType;
+const securityGroupId = getInput(`security-group-id`);
+const subnetId = getInput(`subnet-id`);
 
-const label = core.getInput(`label`);
-const ec2InstanceId = core.getInput(`ec2-instance-id`);
+const label = getInput(`label`);
+const ec2InstanceId = getInput(`ec2-instance-id`);
 
 if (mode === `start`) {
   if (!ec2Params && (!ec2ImageId || !ec2InstanceType || !subnetId || !securityGroupId)) {
@@ -51,14 +54,14 @@ if (mode === `start`) {
   err(`Wrong mode. Allowed values: start, stop.`);
 }
 
-const keyName = core.getInput(`key-name`);
-const storagePath = core.getInput(`storage-path`);
-const storageSize = core.getInput(`storage-size`);
-const iamRoleName = core.getInput(`iam-role-name`);
-const runnerHomeDir = core.getInput(`runner-home-dir`);
-const preRunnerScript = core.getInput(`pre-runner-script`);
+const keyName = getInput(`key-name`);
+const storagePath = getInput(`storage-path`);
+const storageSize = getInput(`storage-size`);
+const iamRoleName = getInput(`iam-role-name`);
+const runnerHomeDir = getInput(`runner-home-dir`);
+const preRunnerScript = getInput(`pre-runner-script`);
 
-const tags = JSON.parse(core.getInput(`aws-resource-tags`));
+const tags = JSON.parse(getInput(`aws-resource-tags`));
 const tagSpecifications: TagSpecification[] | undefined =
   tags.length === 0
     ? undefined
@@ -70,12 +73,12 @@ const tagSpecifications: TagSpecification[] | undefined =
         { ResourceType: `volume`, Tags: tags },
       ];
 
-const octokit = github.getOctokit(githubToken);
+const octokit = getOctokit(githubToken);
 
 // the values of github.context.repo.owner and github.context.repo.repo are taken from
 // the environment variable GITHUB_REPOSITORY specified in "owner/repo" format and
 // provided by the GitHub Action on the runtime
-const { owner, repo } = github.context.repo;
+const { owner, repo } = context.repo;
 const githubContext = {
   owner: owner,
   repo: repo,
@@ -151,14 +154,14 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
     const result = await new EC2().runInstances(params);
     const ec2InstanceId = result.Instances?.[0]?.InstanceId;
     if (ec2InstanceId) {
-      core.info(`AWS EC2 instance ${ec2InstanceId} is started`);
+      info(`AWS EC2 instance ${ec2InstanceId} is started`);
       return ec2InstanceId;
     }
-  } catch (error) {
-    core.error(`AWS EC2 instance starting error`);
-    throw error;
+  } catch (e) {
+    error(`AWS EC2 instance starting error`);
+    throw e;
   }
-  core.error(`AWS EC2 instance starting error`);
+  error(`AWS EC2 instance starting error`);
   throw new Error(`No ec2 instance id returned`);
 }
 
@@ -167,10 +170,10 @@ async function terminateEc2Instance() {
     await new EC2().terminateInstances({
       InstanceIds: [ec2InstanceId],
     });
-    core.info(`AWS EC2 instance ${ec2InstanceId} is terminated`);
-  } catch (error) {
-    core.error(`AWS EC2 instance ${ec2InstanceId} termination error`);
-    throw error;
+    info(`AWS EC2 instance ${ec2InstanceId} is terminated`);
+  } catch (e) {
+    error(`AWS EC2 instance ${ec2InstanceId} termination error`);
+    throw e;
   }
 }
 
@@ -186,10 +189,10 @@ async function waitForInstanceRunning(ec2InstanceId: string) {
         InstanceIds: [ec2InstanceId],
       },
     );
-    core.info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
-  } catch (error) {
-    core.error(`AWS EC2 instance ${ec2InstanceId} initialization error`);
-    throw error;
+    info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
+  } catch (e) {
+    error(`AWS EC2 instance ${ec2InstanceId} initialization error`);
+    throw e;
   }
 }
 
@@ -201,12 +204,10 @@ async function getRunner(label: string) {
       `GET /repos/{owner}/{repo}/actions/runners`,
       githubContext,
     );
-    const foundRunners = filter(runners, { labels: [{ name: label }] });
+    const foundRunners = runners.filter((runner) => runner.labels.some((l) => l.name === label));
     return foundRunners.length > 0 ? foundRunners[0] : null;
-  } catch (error) {
-    core.error(
-      `Get runner error: ${error && typeof error === 'object' && 'message' in error ? error.message : error}`,
-    );
+  } catch (e) {
+    error(`Get runner error: ${e && typeof e === 'object' && 'message' in e ? e.message : e}`);
     return null;
   }
 }
@@ -218,11 +219,11 @@ async function getRegistrationToken() {
       `POST /repos/{owner}/{repo}/actions/runners/registration-token`,
       githubContext,
     );
-    core.info(`GitHub Registration Token is received`);
+    info(`GitHub Registration Token is received`);
     return response.data.token;
-  } catch (error) {
-    core.error(`GitHub Registration Token receiving error`);
-    throw error;
+  } catch (e) {
+    error(`GitHub Registration Token receiving error`);
+    throw e;
   }
 }
 
@@ -231,9 +232,7 @@ async function removeRunner() {
 
   // skip the runner removal process if the runner is not found
   if (!runner) {
-    core.info(
-      `GitHub self-hosted runner with label ${label} is not found, so the removal is skipped`,
-    );
+    info(`GitHub self-hosted runner with label ${label} is not found, so the removal is skipped`);
     return;
   }
 
@@ -242,10 +241,10 @@ async function removeRunner() {
       ...githubContext,
       runner_id: runner.id,
     });
-    core.info(`GitHub self-hosted runner ${runner.name} is removed`);
-  } catch (error) {
-    core.error(`GitHub self-hosted runner removal error`);
-    throw error;
+    info(`GitHub self-hosted runner ${runner.name} is removed`);
+  } catch (e) {
+    error(`GitHub self-hosted runner removal error`);
+    throw e;
   }
 }
 
@@ -256,26 +255,24 @@ async function waitForRunnerRegistered(label: string) {
   const timeout = timeoutMinutes * 60;
   let attempts = Math.ceil(timeout / retryIntervalSeconds);
 
-  core.info(
+  info(
     `Waiting ${quietPeriodSeconds}s for the AWS EC2 instance to be registered in GitHub as a new self-hosted runner`,
   );
 
   await new Promise((r) => setTimeout(r, quietPeriodSeconds * 1000));
 
-  core.info(
-    `Checking every ${retryIntervalSeconds}s if the GitHub self-hosted runner is registered`,
-  );
+  info(`Checking every ${retryIntervalSeconds}s if the GitHub self-hosted runner is registered`);
 
   return new Promise<void>((resolve, reject) => {
     const interval = setInterval(async () => {
-      core.info(`Checking...`);
+      info(`Checking...`);
       const runner = await getRunner(label);
       if (runner?.status === `online`) {
-        core.info(`GitHub self-hosted runner ${runner.name} is registered and ready to use`);
+        info(`GitHub self-hosted runner ${runner.name} is registered and ready to use`);
         clearInterval(interval);
         resolve();
       } else if (attempts-- < 0) {
-        core.error(`GitHub self-hosted runner registration error`);
+        error(`GitHub self-hosted runner registration error`);
         clearInterval(interval);
         reject(
           `A timeout of ${timeoutMinutes} minutes is exceeded. Your AWS EC2 instance was not able to register itself in GitHub as a new self-hosted runner.`,
@@ -283,11 +280,6 @@ async function waitForRunnerRegistered(label: string) {
       }
     }, retryIntervalSeconds * 1000);
   });
-}
-
-function setOutput(label: string, ec2InstanceId: string) {
-  core.setOutput(`label`, label);
-  core.setOutput(`ec2-instance-id`, ec2InstanceId);
 }
 
 function generateUniqueLabel() {
@@ -298,7 +290,8 @@ async function start() {
   const label = generateUniqueLabel();
   const githubRegistrationToken = await getRegistrationToken();
   const ec2InstanceId = await startEc2Instance(label, githubRegistrationToken);
-  setOutput(label, ec2InstanceId);
+  setOutput(`label`, label);
+  setOutput(`ec2-instance-id`, ec2InstanceId);
   await waitForInstanceRunning(ec2InstanceId);
   await waitForRunnerRegistered(label);
 }
@@ -315,9 +308,9 @@ async function stop() {
     } else {
       await stop();
     }
-  } catch (error) {
-    const e = error as Error;
-    core.error(e);
-    core.setFailed(e.message);
+  } catch (e) {
+    const err = e as Error;
+    error(err);
+    setFailed(err.message);
   }
 })();
