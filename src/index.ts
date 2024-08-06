@@ -12,7 +12,7 @@ const { error, getInput, info, setFailed, setOutput } = core;
 const { context, getOctokit } = github;
 const { EC2, waitUntilInstanceRunning } = AWS;
 
-function err(message: string) {
+function err(message: string): never {
   const e = new Error(message);
   setFailed(message);
   error(e);
