@@ -204,6 +204,9 @@ async function getRunner(label: string) {
     const foundRunners = filter(runners, { labels: [{ name: label }] });
     return foundRunners.length > 0 ? foundRunners[0] : null;
   } catch (error) {
+    core.error(
+      `Get runner error: ${error && typeof error === 'object' && 'message' in error ? error.message : error}`,
+    );
     return null;
   }
 }
@@ -309,7 +312,11 @@ async function stop() {
 
 (async function () {
   try {
-    mode === `start` ? await start() : await stop();
+    if (mode === `start`) {
+      await start();
+    } else {
+      await stop();
+    }
   } catch (error) {
     const e = error as Error;
     core.error(e);

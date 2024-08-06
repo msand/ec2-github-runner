@@ -12,23 +12,24 @@
     "url": "https://github.com/machulav/ec2-github-runner/issues"
   },
   "scripts": {
-    "index": "node -r dotenv/config src/index.ts",
-    "lint": "eslint ./src/*.js",
+    "index": "node -r dotenv/config dist/index.js",
+    "lint": "eslint src/index.ts",
     "package": "ncc build src/index.ts"
   },
-  "dependencies": {
+  "devDependencies": {
     "@actions/core": "^1.10.1",
     "@actions/github": "^6.0.0",
     "@aws-sdk/client-ec2": "^3.624.0",
-    "lodash": "^4.17.21"
-  },
-  "devDependencies": {
+    "@eslint/js": "^9.8.0",
     "@types/lodash": "^4.17.7",
     "@types/node": "^22.1.0",
     "@vercel/ncc": "^0.38.1",
-    "dotenv": "^8.6.0",
-    "eslint": "^7.32.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^9.8.0",
+    "globals": "^15.9.0",
+    "lodash": "^4.17.21",
     "prettier": "^3.3.3",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.0.1"
   }
 }
