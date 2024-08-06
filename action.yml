@@ -15,6 +15,12 @@ inputs:
     description: >-
       GitHub Personal Access Token with the 'repo' scope assigned.
     required: true
+  ec2-params:
+    description: >-
+      EC2 params in JSON format.
+      Use either this or the granular inputs that follow.
+    required: false
+    default: 'null'
   ec2-image-id:
     description: >-
       EC2 Image Id (AMI). The new runner will be launched from this image.
@@ -36,6 +42,11 @@ inputs:
       The security group should belong to the same VPC as the specified subnet.
       The runner doesn't require any inbound traffic. However, outbound traffic should be allowed.
       This input is required if you use the 'start' mode.
+    required: false
+  key-name:
+    description: >-
+      EC2 Key Pair name. 
+      Can be assigned to the EC2 instance so user can SSH in for debuging.
     required: false
   storage-path:
     description: >-

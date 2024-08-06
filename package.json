@@ -12,9 +12,9 @@
     "url": "https://github.com/machulav/ec2-github-runner/issues"
   },
   "scripts": {
-    "index": "node -r dotenv/config ./src/index.js",
+    "index": "node -r dotenv/config src/index.ts",
     "lint": "eslint ./src/*.js",
-    "package": "ncc build ./src/index.js"
+    "package": "ncc build src/index.ts"
   },
   "dependencies": {
     "@actions/core": "^1.10.0",
@@ -23,8 +23,12 @@
     "lodash": "^4.17.21"
   },
   "devDependencies": {
+    "@types/lodash": "^4.17.7",
+    "@types/node": "^22.1.0",
     "@vercel/ncc": "^0.25.1",
     "dotenv": "^8.6.0",
-    "eslint": "^7.32.0"
+    "eslint": "^7.32.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4"
   }
 }
