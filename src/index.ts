@@ -248,14 +248,17 @@ async function removeRunner() {
 
 async function waitForRunnerRegistered(label: string) {
   const timeoutMinutes = 5;
-  const retryIntervalSeconds = 10;
-  const quietPeriodSeconds = 30;
+  const retryIntervalSeconds = 5;
+  const quietPeriodSeconds = 15;
+  const timeout = timeoutMinutes * 60;
   let waitSeconds = 0;
 
   core.info(
     `Waiting ${quietPeriodSeconds}s for the AWS EC2 instance to be registered in GitHub as a new self-hosted runner`,
   );
+
   await new Promise((r) => setTimeout(r, quietPeriodSeconds * 1000));
+
   core.info(
     `Checking every ${retryIntervalSeconds}s if the GitHub self-hosted runner is registered`,
   );
@@ -267,7 +270,7 @@ async function waitForRunnerRegistered(label: string) {
         core.info(`GitHub self-hosted runner ${runner.name} is registered and ready to use`);
         clearInterval(interval);
         resolve();
-      } else if (waitSeconds > timeoutMinutes * 60) {
+      } else if (waitSeconds > timeout) {
         core.error(`GitHub self-hosted runner registration error`);
         clearInterval(interval);
         reject(
