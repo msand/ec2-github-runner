@@ -1,15 +1,15 @@
+import * as core from '@actions/core';
+import * as github from '@actions/github';
 import type {
   _InstanceType,
   RunInstancesCommandInput,
   TagSpecification,
 } from '@aws-sdk/client-ec2';
-
-import * as core from '@actions/core';
-import * as github from '@actions/github';
 import * as AWS from '@aws-sdk/client-ec2';
+import { WaiterState } from '@smithy/util-waiter/dist-types/waiter';
 
-const { error, setFailed, getInput, setOutput, info } = core;
-const { getOctokit, context } = github;
+const { error, getInput, info, setFailed, setOutput } = core;
+const { context, getOctokit } = github;
 const { EC2, waitUntilInstanceRunning } = AWS;
 
 function err(message: string) {
@@ -62,7 +62,7 @@ const runnerHomeDir = getInput(`runner-home-dir`);
 const preRunnerScript = getInput(`pre-runner-script`);
 
 const tags = JSON.parse(getInput(`aws-resource-tags`));
-const tagSpecifications: TagSpecification[] | undefined =
+const tagSpec: TagSpecification[] | undefined =
   tags.length === 0
     ? undefined
     : [
@@ -73,6 +73,7 @@ const tagSpecifications: TagSpecification[] | undefined =
         { ResourceType: `volume`, Tags: tags },
       ];
 
+const ec2 = new EC2();
 const octokit = getOctokit(githubToken);
 
 // the values of github.context.repo.owner and github.context.repo.repo are taken from
@@ -100,8 +101,8 @@ mkdir actions-runner && cd actions-runner
 echo "${preRunnerScript}" > pre-runner-script.sh
 source pre-runner-script.sh
 case $(uname -m) in aarch64) ARCH="arm64" ;; amd64|x86_64) ARCH="x64" ;; esac && export RUNNER_ARCH=\${ARCH}
-curl -O -L https://github.com/actions/runner/releases/download/v2.313.0/actions-runner-linux-\${RUNNER_ARCH}-2.313.0.tar.gz
-tar xzf ./actions-runner-linux-\${RUNNER_ARCH}-2.313.0.tar.gz
+curl -O -L https://github.com/actions/runner/releases/download/v2.318.0/actions-runner-linux-\${RUNNER_ARCH}-2.318.0.tar.gz
+tar xzf ./actions-runner-linux-\${RUNNER_ARCH}-2.318.0.tar.gz
 export RUNNER_ALLOW_RUNASROOT=1
 ./config.sh --url https://github.com/${owner}/${repo} --token ${githubRegistrationToken} --labels ${label}
 ./run.sh
@@ -133,7 +134,7 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
         SubnetId: subnetId,
         SecurityGroupIds: [securityGroupId],
         IamInstanceProfile: { Name: iamRoleName },
-        TagSpecifications: tagSpecifications,
+        ...(tagSpec ? { TagSpecifications: tagSpec } : {}),
         ...(keyName ? { KeyName: keyName } : {}),
         ...(storagePath && storageSize
           ? {
@@ -151,7 +152,7 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
       };
 
   try {
-    const result = await new EC2().runInstances(params);
+    const result = await ec2.runInstances(params);
     const ec2InstanceId = result.Instances?.[0]?.InstanceId;
     if (ec2InstanceId) {
       info(`AWS EC2 instance ${ec2InstanceId} is started`);
@@ -167,10 +168,61 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
 
 async function terminateEc2Instance() {
   try {
-    await new EC2().terminateInstances({
+    const result = await ec2.terminateInstances({
       InstanceIds: [ec2InstanceId],
     });
-    info(`AWS EC2 instance ${ec2InstanceId} is terminated`);
+    const lowByte = +(result.TerminatingInstances?.[0]?.CurrentState ?? 0) & 255;
+    const description =
+      lowByte === 32
+        ? `shutting-down`
+        : lowByte === 48
+          ? 'terminated'
+          : lowByte === 64
+            ? 'stopping'
+            : lowByte === 80
+              ? 'stopped'
+              : lowByte;
+    if (typeof description === 'string') {
+      info(`AWS EC2 instance ${ec2InstanceId} is ${description}`);
+      return;
+    }
+    err(`Failed to terminate, EC2 instance has state: ${lowByte}
+    /**
+     *          <p>The valid values for instance-state-code will all be in the range of the low byte and
+     *             they are:</p>
+     *          <ul>
+     *             <li>
+     *                <p>
+     *                   <code>0</code> : <code>pending</code>
+     *                </p>
+     *             </li>
+     *             <li>
+     *                <p>
+     *                   <code>16</code> : <code>running</code>
+     *                </p>
+     *             </li>
+     *             <li>
+     *                <p>
+     *                   <code>32</code> : <code>shutting-down</code>
+     *                </p>
+     *             </li>
+     *             <li>
+     *                <p>
+     *                   <code>48</code> : <code>terminated</code>
+     *                </p>
+     *             </li>
+     *             <li>
+     *                <p>
+     *                   <code>64</code> : <code>stopping</code>
+     *                </p>
+     *             </li>
+     *             <li>
+     *                <p>
+     *                   <code>80</code> : <code>stopped</code>
+     *                </p>
+     *             </li>
+     *          </ul>
+     */`);
   } catch (e) {
     error(`AWS EC2 instance ${ec2InstanceId} termination error`);
     throw e;
@@ -180,16 +232,21 @@ async function terminateEc2Instance() {
 async function waitForInstanceRunning(ec2InstanceId: string) {
   try {
     const timeoutMinutes = 5;
-    await waitUntilInstanceRunning(
+    const result = await waitUntilInstanceRunning(
       {
-        client: new EC2(),
+        client: ec2,
         maxWaitTime: timeoutMinutes * 60,
       },
       {
         InstanceIds: [ec2InstanceId],
       },
     );
-    info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
+    const { state } = result;
+    if (state === WaiterState.SUCCESS) {
+      info(`AWS EC2 instance ${ec2InstanceId} is up and running`);
+      return;
+    }
+    err(`AWS EC2 instance ${ec2InstanceId} initialization error state: ${state}`);
   } catch (e) {
     error(`AWS EC2 instance ${ec2InstanceId} initialization error`);
     throw e;
@@ -237,11 +294,19 @@ async function removeRunner() {
   }
 
   try {
-    await octokit.request(`DELETE /repos/{owner}/{repo}/actions/runners/{runner_id}`, {
-      ...githubContext,
-      runner_id: runner.id,
-    });
-    info(`GitHub self-hosted runner ${runner.name} is removed`);
+    const result = await octokit.request(
+      `DELETE /repos/{owner}/{repo}/actions/runners/{runner_id}`,
+      {
+        ...githubContext,
+        runner_id: runner.id,
+      },
+    );
+    const { status } = result;
+    if (status === 204) {
+      info(`GitHub self-hosted runner ${runner.name} is removed`);
+      return;
+    }
+    err(`Failed to remove runner ${runner.name}, status: ${status}`);
   } catch (e) {
     error(`GitHub self-hosted runner removal error`);
     throw e;
@@ -301,16 +366,7 @@ async function stop() {
   await removeRunner();
 }
 
-(async function () {
-  try {
-    if (mode === `start`) {
-      await start();
-    } else {
-      await stop();
-    }
-  } catch (e) {
-    const err = e as Error;
-    error(err);
-    setFailed(err.message);
-  }
-})();
+(mode === `start` ? start : stop)().catch((e) => {
+  error(e);
+  setFailed(e && 'message' in e ? e.message : e);
+});
