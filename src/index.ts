@@ -34,7 +34,7 @@ if (!githubToken) {
   err(`The github-token input is not specified`);
 }
 
-const ec2Params: RunInstancesCommandInput | null = JSON.parse(getInput(`ec2-params`));
+const ec2Params: RunInstancesCommandInput | null = JSON.parse(getInput(`ec2-params`) || `null`);
 const ec2ImageId = getInput(`ec2-image-id`);
 const ec2InstanceType = getInput(`ec2-instance-type`) as _InstanceType;
 const securityGroupId = getInput(`security-group-id`);
@@ -62,7 +62,7 @@ const iamRoleName = getInput(`iam-role-name`);
 const runnerHomeDir = getInput(`runner-home-dir`);
 const preRunnerScript = getInput(`pre-runner-script`);
 
-const tags = JSON.parse(getInput(`aws-resource-tags`));
+const tags = JSON.parse(getInput(`aws-resource-tags`) || `[]`);
 const tagSpec: TagSpecification[] | undefined =
   tags.length === 0
     ? undefined
@@ -167,9 +167,11 @@ async function startEc2Instance(label: string, githubRegistrationToken: string) 
   throw new Error(`No ec2 instance id returned`);
 }
 
-function getDescription(currentState: AWS.InstanceState | undefined) {
-  const lowByte = +(currentState ?? 0) & 255;
+function getDescription(currentState: number | undefined) {
+  const lowByte = currentState ? currentState & 255 : currentState;
   switch (lowByte) {
+    case 0:
+      return `pending`;
     case 32:
       return `shutting-down`;
     case 48:
@@ -188,7 +190,7 @@ async function terminateEc2Instance() {
     const result = await ec2.terminateInstances({
       InstanceIds: [ec2InstanceId],
     });
-    const currentState = result.TerminatingInstances?.[0]?.CurrentState;
+    const currentState = result.TerminatingInstances?.[0]?.CurrentState?.Code;
     const description = getDescription(currentState);
     if (typeof description === `string`) {
       info(`AWS EC2 instance ${ec2InstanceId} is ${description}`);
